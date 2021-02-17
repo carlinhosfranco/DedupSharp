@@ -8,40 +8,26 @@ using DedupSharp.Stages;
 
 namespace DedupSharp
 {
-    class Program
+    public class Program
     {
-        static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
-            var input = new InputStage();
-            var inputQ = input.CreateQueue<int>();
-            inputQ.Post(input.GetNumbers() );
+            //stages 
+            var inputStage = new InputStage<int[]>();
+            var fragmentStage = new FragmentStage<int[]>();
+            var fragmentTask = fragmentStage.ConsumeAsync(inputStage.BufferStage);
 
-            var outstage = new OutpuStage();
-            var outQ = outstage.PrintConsole();
+            for (int i = 0; i < 10; i++)
+            {
+                for (int j = 0; j < 5; j++)
+                    inputStage.FillInternalBuffer(new[] { i*1, i*2, i*3, i*4, i*5, i*6 });
+            }
+            
+            inputStage.BufferStage.Complete();
 
-            var fr = new FragmentStage(inputQ, outQ);
-
-            fr.Process();
-
-            var completion = outQ.Completion.ContinueWith(delegate { Console.WriteLine(); });
-
-            completion.Wait();
-           
-            // var outstage = new OutpuStage();
-            // var outQ = outstage.PrintConsole();
-
-            // var fr = new FragmentStage(inputQ, outQ);
-
-            // var linkOptions = new DataflowLinkOptions { PropagateCompletion = true };
-           
-            // inputQ.LinkTo(frQ, linkOptions);
-            // frQ.LinkTo(outQ, linkOptions);
-
-            // inputQ.Post(input.GetNumbers());
-
-            // inputQ.Complete();
-
-            // outQ.Completion.Wait();
+            var result = await fragmentTask;
+            
+            fragmentStage.Result(result);
         }
     }
 }

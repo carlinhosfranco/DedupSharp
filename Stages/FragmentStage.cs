@@ -1,55 +1,94 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using DedupSharp.Queues;
 
 namespace DedupSharp.Stages
 {
-    public class FragmentStage
+    public sealed class FragmentStage<TInput> : ITargetBlock<TInput>
     {
+        public Task Completion => throw new NotImplementedException();
 
-        private TransformBlock<int[], (int, double)[]> _proc;
-        private BufferBlock<int[]> _buff; 
-        private ActionBlock<(int, double)[]> _out;
-    
-        public FragmentStage(BufferBlock<int[]> buff, ActionBlock<(int, double)[]> outQ ) 
+        public void Complete()
         {
-            _proc = new TransformBlock<int[], (int, double)[]>( num => {
-                            var size = num.Length;
-                            var result = new (int, double)[size];
-
-                            for (int i = 0; i < size; i++)
-                                result[i] = (num[i], Math.Sqrt(num[i]) );
-
-                            return result;
-            } );  
-            
-            _buff = buff;
-            _out = outQ;
+            throw new NotImplementedException();
         }
 
-        public void Process()
+        public void Fault(Exception exception)
         {
-            var linkOptions = new DataflowLinkOptions { PropagateCompletion = true };
-            var stageProcess = new StageProcess<int>();
-
-            stageProcess.LinkTo(_buff, linkOptions);
-
-            stageProcess.Completion.ContinueWith(delegate  { _proc.Complete(); });
-
-            //var completion = _proc.Completion.ContinueWith(delegate { Cons }  );
-
-            _buff.LinkTo(_proc);            
-            _proc.LinkTo(_out);
-            
-            //_buff.Complete();
-            
-            stageProcess.Complete();
+            throw new NotImplementedException();
         }
 
-        
-       
+        public DataflowMessageStatus OfferMessage(DataflowMessageHeader messageHeader, TInput messageValue, ISourceBlock<TInput> source, bool consumeToAccept)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task<IEnumerable<int>> ConsumeAsync(ISourceBlock<TInput> source)
+        {
+            var itensProcessed = new List<int>();
+            
+            while (await source.OutputAvailableAsync())
+            {
+                var item = await source.ReceiveAsync();
+                var r = ChangeType(item);
+
+                itensProcessed.AddRange(r);
+            }
+
+            return itensProcessed;
+        }
+
+        public async Task<IEnumerable<int>> ConsumeAsync(IReceivableSourceBlock<TInput> source)
+        {
+            //int bytesProcessed = 0;
+            while (await source.OutputAvailableAsync())
+            {
+                while (source.TryReceive(out TInput data))
+                {
+                    //bytesProcessed += data.Length;
+                }
+            }
+            return default;
+        }
+
+        public void Result(IEnumerable<int> data) 
+            => Console.WriteLine($" Values: [{string.Join(",", data)}]\n");
+
+        private int[] ChangeType(object data) 
+            => (int[])Convert.ChangeType(data, typeof(int[]));
+
+        private byte[] ToByteArray(object value)
+        {
+            int rawsize = Marshal.SizeOf(value);
+            byte[] rawdata = new byte[rawsize];
+            GCHandle handle =
+                GCHandle.Alloc(rawdata,
+                GCHandleType.Pinned);
+            Marshal.StructureToPtr(value,
+                handle.AddrOfPinnedObject(),
+                false);
+            handle.Free();
+            return rawdata;
+            // if (maxLength < rawdata.Length) {
+            //     byte[] temp = new byte[maxLength];
+            //     Array.Copy(rawdata, temp, maxLength);
+            //     return temp;
+            // } else {
+            //     return rawdata;
+            // }
+        }
+
+        private T FromByteArray<T>(byte[] rawValue)
+        {
+            GCHandle handle = GCHandle.Alloc(rawValue, GCHandleType.Pinned);
+            T structure = (T)Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof(T));
+            handle.Free();
+            return structure;
+        }
     }
 }
