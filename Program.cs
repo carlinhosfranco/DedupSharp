@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -10,24 +11,19 @@ namespace DedupSharp
 {
     public class Program
     {
-        public static async Task Main(string[] args)
+        public static void Main(string[] args)
         {
-            //stages 
-            var inputStage = new InputStage<int[]>();
-            var fragmentStage = new FragmentStage<int[]>();
-            var fragmentTask = fragmentStage.ConsumeAsync(inputStage.BufferStage);
+            int BufferSize = 1;
+            var inputBuffer = new BlockingCollection<int[][]>(BufferSize);
+            var fragBuffer = new BlockingCollection<int[]>(BufferSize);
 
-            for (int i = 0; i < 10; i++)
-            {
-                for (int j = 0; j < 5; j++)
-                    inputStage.FillInternalBuffer(new[] { i*1, i*2, i*3, i*4, i*5, i*6 });
-            }
-            
-            inputStage.BufferStage.Complete();
+            var farmTask = new TaskFactory(TaskCreationOptions.LongRunning, TaskContinuationOptions.None);
 
-            var result = await fragmentTask;
-            
-            fragmentStage.Result(result);
+            var stage1 = farmTask.StartNew(() => InputStage.ReadArrayNumbers(inputBuffer, 5));
+            var stage2 = farmTask.StartNew(() => FragmentStage.FragIntoSingleNumbers(inputBuffer, fragBuffer));
+            var stage3 = farmTask.StartNew(() => OutpuStage.Output(fragBuffer));
+
+            Task.WaitAll(stage1, stage2, stage3);
         }
     }
 }
